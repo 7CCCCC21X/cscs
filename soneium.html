@@ -148,6 +148,7 @@
     let allAddrs = [];
     const rowMap = {};
 
+    // 格式化时间显示
     function formatTimeAgo(dateStr) {
       if (!dateStr) return '-';
       const date = new Date(dateStr);
@@ -158,25 +159,12 @@
       return `${Math.floor(diff / 30)} 个月前`;
     }
 
-    function getDayKey(dateStr) {
-      const d = new Date(dateStr);
-      return `${d.getUTCFullYear()}-${d.getUTCMonth() + 1}-${d.getUTCDate()}`;
-    }
-
-    function getWeekKey(dateStr) {
-      const d = new Date(dateStr);
-      d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
-      const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-      const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
-      return `${d.getUTCFullYear()}W${weekNo}`;
-    }
-
-    function getMonthKey(dateStr) {
-      const d = new Date(dateStr);
-      return `${d.getUTCFullYear()}-${d.getUTCMonth() + 1}`;
-    }
-
-    function saveToCache(data) {
+    function saveToCache(wallets, results) {
+      // 保存钱包地址与查询结果
+      const data = wallets.map((addr, index) => ({
+        address: addr,
+        ...results[index]
+      }));
       localStorage.setItem("soneium_cache", JSON.stringify(data));
     }
 
@@ -190,12 +178,10 @@
 
     function importAddresses() {
       const input = document.getElementById("addressInput").value.trim();
-      // 将地址按换行符分割并去掉空格，确保每个地址在一行显示
       allAddrs = input.split("\n").map(line => line.trim()).filter(line => line.length === 42 && line.startsWith("0x"));
       const tbody = document.getElementById("resultBody");
       tbody.innerHTML = "";
-
-      // 填充表格并保持格式
+      
       allAddrs.forEach((addr, index) => {
         const row = document.createElement("tr");
         row.innerHTML = `
@@ -207,10 +193,7 @@
         tbody.appendChild(row);
         rowMap[addr.toLowerCase()] = row;
       });
-      // 保存地址到缓存，确保格式为一行一个地址
-      localStorage.setItem("wallets", JSON.stringify(allAddrs));
       document.getElementById("selectAll").checked = true;
-      document.getElementById("summaryRow").innerHTML = "";
     }
 
     function toggleAll(source) {
@@ -220,7 +203,7 @@
 
     async function fetchStats(address) {
       try {
-        const [metaRes, counterRes] = await Promise.all([
+        const [metaRes, counterRes] = await Promise.all([ 
           fetch(`https://soneium.blockscout.com/api/v2/addresses/${address}`).then(r => r.json()),
           fetch(`https://soneium.blockscout.com/api/v2/addresses/${address}/counters`).then(r => r.json())
         ]);
@@ -257,26 +240,20 @@
           if (!data.next_page_params) break;
 
           const p = data.next_page_params;
-          if (!p.block_number || !p.fee || !p.hash || p.index === undefined || !p.inserted_at || !p.value) break;
-          const inserted_at = encodeURIComponent(p.inserted_at);
-          pageParams = `&block_number=${p.block_number}&fee=${p.fee}&hash=${p.hash}&index=${p.index}&inserted_at=${inserted_at}&value=${p.value}`;
+          pageParams = `&block_number=${p.block_number}&fee=${p.fee}&hash=${p.hash}&index=${p.index}&inserted_at=${p.inserted_at}&value=${p.value}`;
         }
-        const days = new Set();
-        const weeks = new Set();
-        const months = new Set();
-        const contracts = new Set();
 
+        const days = new Set(), weeks = new Set(), months = new Set(), contracts = new Set();
         for (const tx of allTxs) {
           const date = tx.timestamp;
           if (!date || !tx.to || !tx.to.hash) continue;
-          days.add(getDayKey(date));
-          weeks.add(getWeekKey(date));
-          months.add(getMonthKey(date));
+          days.add(formatTimeAgo(date));
+          weeks.add(formatTimeAgo(date));
+          months.add(formatTimeAgo(date));
           contracts.add(tx.to.hash);
         }
 
         lastTime = allTxs.length > 0 ? allTxs[0].timestamp : null;
-
         return {
           txCount: allTxs.length,
           dayActivity: days.size,
@@ -296,9 +273,8 @@
       const selectedAddrs = checkboxes.filter(cb => (!onlySelected || cb.checked)).map(cb => cb.dataset.address);
       if (selectedAddrs.length === 0) return alert("请选择至少一个地址！");
       const queryBtn = document.getElementById("queryAllBtn");
-      const selectedBtn = document.getElementById("querySelectedBtn");
-      queryBtn.disabled = selectedBtn.disabled = true;
-      queryBtn.textContent = selectedBtn.textContent = "查询中...";
+      queryBtn.disabled = true;
+      queryBtn.textContent = "查询中...";
 
       const resultsMap = {};
       let index = 0;
@@ -311,24 +287,19 @@
           batch.push((async () => {
             const [txRes, statRes] = await Promise.all([fetchTxData(addr), fetchStats(addr)]);
             const row = rowMap[addr.toLowerCase()];
-            const hasError = txRes.error || statRes.error;
-            const daysAgo = txRes.lastTxTime ? Math.floor((new Date() - new Date(txRes.lastTxTime)) / (1000 * 86400)) : null;
-            const timeText = formatTimeAgo(txRes.lastTxTime);
-            const timeColorClass = daysAgo > 7 ? "error" : "";
-
             row.innerHTML = `
               <td><input type="checkbox" class="row-checkbox" data-address="${addr}" checked /></td>
-              <td>${allAddrs.indexOf(addr) + 1}</td>
-              <td style="max-width: 160px;">${addr}</td>
+              <td>${index}</td>
+              <td>${addr}</td>
               <td>${txRes.txCount}</td>
               <td>${txRes.dayActivity}</td>
               <td>${txRes.weekActivity}</td>
               <td>${txRes.monthActivity}</td>
               <td>${txRes.contractActivity}</td>
-              <td class="${timeColorClass}">${timeText}</td>
+              <td>${txRes.lastTxTime}</td>
               <td>${statRes.ethBalance}</td>
               <td>${statRes.feeUSD}</td>
-              <td class="${hasError ? 'error' : ''}">${hasError ? (txRes.error || statRes.error) : "✅"}</td>
+              <td>✅</td>
             `;
             resultsMap[addr.toLowerCase()] = { address: addr, ...txRes, ...statRes };
           })());
@@ -339,65 +310,35 @@
 
       await runBatch();
       const resultList = selectedAddrs.map(addr => resultsMap[addr.toLowerCase()]);
-      saveToCache(resultList);
-      showSummary(resultList);
+      saveToCache(allAddrs, resultList);
 
-      queryBtn.disabled = selectedBtn.disabled = false;
+      queryBtn.disabled = false;
       queryBtn.textContent = "开始查询";
-      selectedBtn.textContent = "查询选定地址";
-    }
-
-    function showSummary(data) {
-      const summary = data.reduce((acc, cur) => {
-        acc.eth += parseFloat(cur.ethBalance || 0);
-        acc.gas += parseFloat(cur.feeUSD || 0);
-        return acc;
-      }, { eth: 0, gas: 0 });
-
-      document.getElementById("summaryRow").innerHTML = `
-        <tr>
-          <td colspan="9">总计</td>
-          <td>${summary.eth.toFixed(4)}</td>
-          <td>${summary.gas.toFixed(4)}</td>
-          <td>-</td>
-        </tr>`;
     }
 
     window.addEventListener("DOMContentLoaded", () => {
-      const cachedWallets = localStorage.getItem("wallets");
-      if (cachedWallets) {
-        const wallets = JSON.parse(cachedWallets);
-        document.getElementById("addressInput").value = wallets.join("\n");
-        allAddrs = wallets;
+      const cached = loadFromCache();
+      if (cached.length > 0) {
+        document.getElementById("addressInput").value = cached.map(x => x.address).join("\n");
+        allAddrs = cached.map(x => x.address);
         const tbody = document.getElementById("resultBody");
         tbody.innerHTML = "";
-
-        wallets.forEach((address, index) => {
+        cached.forEach((item, index) => {
           const row = document.createElement("tr");
-          const daysAgo = address.lastTxTime ? Math.floor((new Date() - new Date(address.lastTxTime)) / (1000 * 86400)) : null;
-          const timeText = formatTimeAgo(address.lastTxTime);
-          const color = daysAgo > 7 ? "error" : "";
-          const err = address.error;
-
           row.innerHTML = `
-            <td><input type="checkbox" class="row-checkbox" data-address="${address}" checked /></td>
             <td>${index + 1}</td>
-            <td style="max-width: 160px;">${address}</td>
-            <td>${address.txCount}</td>
-            <td>${address.dayActivity}</td>
-            <td>${address.weekActivity}</td>
-            <td>${address.monthActivity}</td>
-            <td>${address.contractActivity}</td>
-            <td class="${color}">${timeText}</td>
-            <td>${address.ethBalance}</td>
-            <td>${address.feeUSD}</td>
-            <td class="${err ? 'error' : ''}">${err ? address.error : "✅"}</td>
+            <td>${item.address}</td>
+            <td>${item.txCount}</td>
+            <td>${item.dayActivity}</td>
+            <td>${item.weekActivity}</td>
+            <td>${item.monthActivity}</td>
+            <td>${item.contractActivity}</td>
+            <td>${item.lastTxTime}</td>
+            <td>${item.ethBalance}</td>
+            <td>${item.feeUSD}</td>
           `;
           tbody.appendChild(row);
-          rowMap[address.toLowerCase()] = row;
         });
-        showSummary(wallets);
-        document.getElementById("selectAll").checked = true;
       }
     });
   </script>
