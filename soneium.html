@@ -190,9 +190,12 @@
 
     function importAddresses() {
       const input = document.getElementById("addressInput").value.trim();
+      // 将地址按换行符分割并去掉空格，确保每个地址在一行显示
       allAddrs = input.split("\n").map(line => line.trim()).filter(line => line.length === 42 && line.startsWith("0x"));
       const tbody = document.getElementById("resultBody");
       tbody.innerHTML = "";
+
+      // 填充表格并保持格式
       allAddrs.forEach((addr, index) => {
         const row = document.createElement("tr");
         row.innerHTML = `
@@ -204,6 +207,8 @@
         tbody.appendChild(row);
         rowMap[addr.toLowerCase()] = row;
       });
+      // 保存地址到缓存，确保格式为一行一个地址
+      localStorage.setItem("wallets", JSON.stringify(allAddrs));
       document.getElementById("selectAll").checked = true;
       document.getElementById("summaryRow").innerHTML = "";
     }
@@ -359,37 +364,39 @@
     }
 
     window.addEventListener("DOMContentLoaded", () => {
-      const cached = loadFromCache();
-      if (cached.length > 0) {
-        document.getElementById("addressInput").value = cached.map(x => x.address).join("\\n");
-        allAddrs = cached.map(x => x.address);
+      const cachedWallets = localStorage.getItem("wallets");
+      if (cachedWallets) {
+        const wallets = JSON.parse(cachedWallets);
+        document.getElementById("addressInput").value = wallets.join("\n");
+        allAddrs = wallets;
         const tbody = document.getElementById("resultBody");
         tbody.innerHTML = "";
-        cached.forEach((item, index) => {
+
+        wallets.forEach((address, index) => {
           const row = document.createElement("tr");
-          const daysAgo = item.lastTxTime ? Math.floor((new Date() - new Date(item.lastTxTime)) / (1000 * 86400)) : null;
-          const timeText = formatTimeAgo(item.lastTxTime);
+          const daysAgo = address.lastTxTime ? Math.floor((new Date() - new Date(address.lastTxTime)) / (1000 * 86400)) : null;
+          const timeText = formatTimeAgo(address.lastTxTime);
           const color = daysAgo > 7 ? "error" : "";
-          const err = item.error;
+          const err = address.error;
 
           row.innerHTML = `
-            <td><input type="checkbox" class="row-checkbox" data-address="${item.address}" checked /></td>
+            <td><input type="checkbox" class="row-checkbox" data-address="${address}" checked /></td>
             <td>${index + 1}</td>
-            <td style="max-width: 160px;">${item.address}</td>
-            <td>${item.txCount}</td>
-            <td>${item.dayActivity}</td>
-            <td>${item.weekActivity}</td>
-            <td>${item.monthActivity}</td>
-            <td>${item.contractActivity}</td>
+            <td style="max-width: 160px;">${address}</td>
+            <td>${address.txCount}</td>
+            <td>${address.dayActivity}</td>
+            <td>${address.weekActivity}</td>
+            <td>${address.monthActivity}</td>
+            <td>${address.contractActivity}</td>
             <td class="${color}">${timeText}</td>
-            <td>${item.ethBalance}</td>
-            <td>${item.feeUSD}</td>
-            <td class="${err ? 'error' : ''}">${err ? item.error : "✅"}</td>
+            <td>${address.ethBalance}</td>
+            <td>${address.feeUSD}</td>
+            <td class="${err ? 'error' : ''}">${err ? address.error : "✅"}</td>
           `;
           tbody.appendChild(row);
-          rowMap[item.address.toLowerCase()] = row;
+          rowMap[address.toLowerCase()] = row;
         });
-        showSummary(cached);
+        showSummary(wallets);
         document.getElementById("selectAll").checked = true;
       }
     });
