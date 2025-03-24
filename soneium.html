@@ -2,7 +2,7 @@
 <html lang="zh">
 <head>
   <meta charset="UTF-8" />
-  <title>Soneium 活跃度查询</title>
+  <title>Soneium 批量活跃度查询</title>
   <style>
     body {
       font-family: 'Helvetica Neue', sans-serif;
@@ -148,6 +148,7 @@
     let allAddrs = [];
     const rowMap = {};
 
+    // 格式化时间显示
     function formatTimeAgo(dateStr) {
       if (!dateStr) return '-';
       const date = new Date(dateStr);
@@ -158,16 +159,16 @@
       return `${Math.floor(diff / 30)} 个月前`;
     }
 
-    // 保存数据到缓存
     function saveToCache(wallets, results) {
+      // 保存钱包地址与查询结果
       const data = wallets.map((addr, index) => ({
         address: addr,
+        checked: document.querySelector(`input[data-address="${addr}"]`).checked, // 保存复选框状态
         ...results[index]
       }));
       localStorage.setItem("soneium_cache", JSON.stringify(data));
     }
 
-    // 从缓存中加载数据
     function loadFromCache() {
       try {
         return JSON.parse(localStorage.getItem("soneium_cache") || "[]");
@@ -345,8 +346,9 @@
         cached.forEach((item, index) => {
           const row = document.createElement("tr");
           row.innerHTML = `
+            <td><input type="checkbox" class="row-checkbox" data-address="${item.address}" ${item.checked ? 'checked' : ''} /></td> <!-- 恢复复选框状态 -->
             <td>${index + 1}</td>
-            <td>${item.address}</td>
+            <td style="max-width: 160px;">${item.address}</td>
             <td>${item.txCount}</td>
             <td>${item.dayActivity}</td>
             <td>${item.weekActivity}</td>
@@ -357,7 +359,10 @@
             <td>${item.feeUSD}</td>
           `;
           tbody.appendChild(row);
+          rowMap[item.address.toLowerCase()] = row;
         });
+        showSummary(cached);
+        document.getElementById("selectAll").checked = true; // 默认选中所有复选框
       }
     });
   </script>
