@@ -148,7 +148,6 @@
     let allAddrs = [];
     const rowMap = {};
 
-    // 格式化时间显示
     function formatTimeAgo(dateStr) {
       if (!dateStr) return '-';
       const date = new Date(dateStr);
@@ -181,7 +180,6 @@
       allAddrs = input.split("\n").map(line => line.trim()).filter(line => line.length === 42 && line.startsWith("0x"));
       const tbody = document.getElementById("resultBody");
       tbody.innerHTML = "";
-      
       allAddrs.forEach((addr, index) => {
         const row = document.createElement("tr");
         row.innerHTML = `
@@ -194,6 +192,7 @@
         rowMap[addr.toLowerCase()] = row;
       });
       document.getElementById("selectAll").checked = true;
+      document.getElementById("summaryRow").innerHTML = "";
     }
 
     function toggleAll(source) {
@@ -277,8 +276,7 @@
       queryBtn.textContent = "查询中...";
 
       const resultsMap = {};
-      let index = 0;
-      const maxConcurrency = 5;
+      let index = 0, maxConcurrency = 5;
 
       async function runBatch() {
         const batch = [];
@@ -287,19 +285,22 @@
           batch.push((async () => {
             const [txRes, statRes] = await Promise.all([fetchTxData(addr), fetchStats(addr)]);
             const row = rowMap[addr.toLowerCase()];
+            const hasError = txRes.error || statRes.error;
+            const timeText = formatTimeAgo(txRes.lastTxTime);
+            const timeColorClass = txRes.lastTxTime && ((new Date() - new Date(txRes.lastTxTime)) / 86400000 > 7) ? "error" : "";
             row.innerHTML = `
               <td><input type="checkbox" class="row-checkbox" data-address="${addr}" checked /></td>
-              <td>${index}</td>
-              <td>${addr}</td>
+              <td>${allAddrs.indexOf(addr) + 1}</td>
+              <td style="max-width: 160px;">${addr}</td>
               <td>${txRes.txCount}</td>
               <td>${txRes.dayActivity}</td>
               <td>${txRes.weekActivity}</td>
               <td>${txRes.monthActivity}</td>
               <td>${txRes.contractActivity}</td>
-              <td>${txRes.lastTxTime}</td>
+              <td class="${timeColorClass}">${timeText}</td>
               <td>${statRes.ethBalance}</td>
               <td>${statRes.feeUSD}</td>
-              <td>✅</td>
+              <td class="${hasError ? 'error' : ''}">${hasError ? (txRes.error || statRes.error) : "✅"}</td>
             `;
             resultsMap[addr.toLowerCase()] = { address: addr, ...txRes, ...statRes };
           })());
@@ -311,9 +312,26 @@
       await runBatch();
       const resultList = selectedAddrs.map(addr => resultsMap[addr.toLowerCase()]);
       saveToCache(allAddrs, resultList);
+      showSummary(resultList);
 
       queryBtn.disabled = false;
       queryBtn.textContent = "开始查询";
+    }
+
+    function showSummary(data) {
+      const summary = data.reduce((acc, cur) => {
+        acc.eth += parseFloat(cur.ethBalance || 0);
+        acc.gas += parseFloat(cur.feeUSD || 0);
+        return acc;
+      }, { eth: 0, gas: 0 });
+
+      document.getElementById("summaryRow").innerHTML = `
+        <tr>
+          <td colspan="9">总计</td>
+          <td>${summary.eth.toFixed(4)}</td>
+          <td>${summary.gas.toFixed(4)}</td>
+          <td>-</td>
+        </tr>`;
     }
 
     window.addEventListener("DOMContentLoaded", () => {
