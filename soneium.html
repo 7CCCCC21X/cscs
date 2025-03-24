@@ -158,8 +158,8 @@
       return `${Math.floor(diff / 30)} 个月前`;
     }
 
+    // 保存数据到缓存
     function saveToCache(wallets, results) {
-      // 保存钱包地址与查询结果
       const data = wallets.map((addr, index) => ({
         address: addr,
         ...results[index]
@@ -167,6 +167,7 @@
       localStorage.setItem("soneium_cache", JSON.stringify(data));
     }
 
+    // 从缓存中加载数据
     function loadFromCache() {
       try {
         return JSON.parse(localStorage.getItem("soneium_cache") || "[]");
